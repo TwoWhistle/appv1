@@ -1,0 +1,131 @@
+//
+//  MetricsView.swift
+//  appV1
+//
+//  Created by Ryan Yue on 3/9/25.
+//
+
+import SwiftUI
+
+struct MetricsView: View {
+    @ObservedObject var bleManager: BLEManager
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                VitalSignsSection(bleManager: bleManager)
+                ECGFeaturesSection(bleManager: bleManager)
+                SCD41SensorSection(bleManager: bleManager)
+                BloodPressureSection(bleManager: bleManager)
+                EEGBandsSection(bleManager: bleManager)
+            }
+            .navigationTitle("Live Metrics")
+        }
+    }
+}
+
+// MARK: - 🔹 Vital Signs Section
+struct VitalSignsSection: View {
+    let bleManager: BLEManager
+    
+    var body: some View {
+        Section(header: Text("Vital Signs")) {
+            MetricRow(label: "SpO₂", value: bleManager.computedSpO2, unit: "%", color: .blue)
+            MetricRow(label: "Heart Rate", value: bleManager.computedHeartRate, unit: "BPM", color: .blue)
+            MetricRow(label: "Resp Rate", value: bleManager.computedRespRate, unit: "br/min", color: .blue)
+            MetricRow(label: "HRV", value: bleManager.computedHRV, unit: "ms", color: .blue)
+            MetricRow(label: "PTT", value: bleManager.computedPTT, unit: "s", color: .blue, specifier: "%.3f")
+        }
+    }
+}
+
+// MARK: - 🔹 ECG Features Section
+struct ECGFeaturesSection: View {
+    let bleManager: BLEManager
+    
+    var body: some View {
+        Section(header: Text("ECG Features")) {
+            let qrsValue = bleManager.computedECGFeatures["QRS"] ?? 0
+            let stValue = bleManager.computedECGFeatures["ST"] ?? 0
+            MetricRow(label: "QRS Duration", value: qrsValue, unit: "s", color: .green, specifier: "%.3f")
+            MetricRow(label: "ST Amplitude", value: stValue, unit: "", color: .green, specifier: "%.3f")
+        }
+    }
+}
+
+// MARK: - 🔹 SCD41 Sensor Section
+struct SCD41SensorSection: View {
+    let bleManager: BLEManager
+    
+    var body: some View {
+        Section(header: Text("SCD41 Sensor")) {
+            MetricRow(label: "CO₂", value: bleManager.lastCO2, unit: "ppm", color: .red)
+            MetricRow(label: "Temperature", value: bleManager.lastTemperature, unit: "°C", color: .red, specifier: "%.2f")
+            MetricRow(label: "Humidity", value: bleManager.lastHumidity, unit: "%", color: .red, specifier: "%.2f")
+        }
+    }
+}
+
+// MARK: - 🔹 Blood Pressure Section
+struct BloodPressureSection: View {
+    let bleManager: BLEManager
+    
+    var body: some View {
+        Section(header: Text("Blood Pressure")) {
+            MetricRow(label: "Systolic", value: bleManager.computedSystolicBP, unit: "mmHg", color: .purple)
+            MetricRow(label: "Diastolic", value: bleManager.computedDiastolicBP, unit: "mmHg", color: .purple)
+        }
+    }
+}
+
+// MARK: - 🔹 EEG Bands Section (NEW)
+struct EEGBandsSection: View {
+    let bleManager: BLEManager
+    
+    var body: some View {
+        Section(header: Text("EEG Bands")) {
+            ForEach(["Delta", "Theta", "Alpha", "Beta", "Gamma"], id: \.self) { band in
+                let value = bleManager.eegBands[band] ?? 0
+                MetricRow(label: band, value: value, unit: "µV²", color: colorForEEGBand(band), specifier: "%.2f")
+            }
+        }
+    }
+}
+
+// MARK: - 🔹 Reusable MetricRow View
+struct MetricRow: View {
+    let label: String
+    let value: Float
+    let unit: String
+    let color: Color
+    var specifier: String = "%.1f"
+    
+    var body: some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Text("\(value, specifier: specifier) \(unit)")
+                .foregroundColor(color)
+        }
+    }
+}
+
+// MARK: - 🔹 EEG Band Colors
+private func colorForEEGBand(_ band: String) -> Color {
+    switch band {
+    case "Delta": return .blue
+    case "Theta": return .purple
+    case "Alpha": return .green
+    case "Beta": return .orange
+    case "Gamma": return .red
+    default: return .black
+    }
+}
+
+// MARK: - Preview
+struct MetricsView_Previews: PreviewProvider {
+    static var previews: some View {
+        MetricsView(bleManager: BLEManager())
+    }
+}
+
