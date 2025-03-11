@@ -46,7 +46,21 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         "Beta": 0.0,
         "Gamma": 0.0
     ]
-
+    
+    @Published var wristAccelX: Float = 0.0
+    @Published var wristAccelY: Float = 0.0
+    @Published var wristAccelZ: Float = 0.0
+    @Published var wristGyroX: Float = 0.0
+    @Published var wristGyroY: Float = 0.0
+    @Published var wristGyroZ: Float = 0.0
+    
+    @Published var eegAccelX: Float = 0.0
+    @Published var eegAccelY: Float = 0.0
+    @Published var eegAccelZ: Float = 0.0
+    @Published var eegGyroX: Float = 0.0
+    @Published var eegGyroY: Float = 0.0
+    @Published var eegGyroZ: Float = 0.0
+    
 
     // MARK: - BLE References
     private var centralManager: CBCentralManager!
@@ -257,9 +271,9 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         lastReceivedChunk = rawString
         log("📡 Full Wrist Chunk: \(rawString)")
 
-        // Split into 4 parts by ';'
+        // Split into 5 parts by ';'
         let parts = rawString.components(separatedBy: ";")
-        guard parts.count == 4 else {
+        guard parts.count == 5 else {
             log("⚠️ Incorrect chunk format (need 4 sections).")
             return
         }
@@ -268,9 +282,10 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         let ecgPart      = parts[1]  // e.g. "ECG,512,514,..."
         let ppgPart      = parts[2]  // e.g. "PPG,1024,1022,..."
         let scdPart      = parts[3]  // e.g. "SCD,435.12,25.76,48.2"
+        let wristIMUPart = parts[4]  // e.g. "IMU,AccelXSum,AccelYSum..."
 
         // Convert timestamp if needed
-        let _ = Float(timestampStr) ?? 0.0
+        let wristTimestamp = Float(timestampStr) ?? 0.0
         
         // ========== PARSE ECG SAMPLES ==========
         var ecgSamples: [Float] = []
@@ -313,6 +328,33 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         } else {
             log("⚠️ SCD format mismatch: \(scdPart)")
         }
+        
+        // ===== IMU =======
+        // Format: "IMU,AccelX,AccelY,AccelZ,GyroX,GyroY,GyroX"
+        let wristIMUComponents = wristIMUPart.components(separatedBy: ",")
+        if wristIMUComponents.count == 7, wristIMUComponents[0] == "IMU" {
+            if let wristAX = Float(wristIMUComponents[1]),
+               let wristAY = Float(wristIMUComponents[2]),
+               let wristAZ = Float(wristIMUComponents[3]),
+               let wristGX = Float(wristIMUComponents[4]),
+               let wristGY  = Float(wristIMUComponents[5]),
+               let wristGZ  = Float(wristIMUComponents[6]) {
+               
+                DispatchQueue.main.async {
+                    self.wristAccelX = wristAX
+                    self.wristAccelY = wristAY
+                    self.wristAccelZ = wristAZ
+                    self.wristGyroX = wristGX
+                    self.wristGyroY = wristGY
+                    self.wristGyroZ = wristGZ
+                }
+            } else {
+                log("⚠️ wrist IMU parse error: accel/gyro not floats.")
+            }
+        } else {
+            log("⚠️ wrist IMU format mismatch: \(scdPart)")
+        }
+        
 
         // ========== ADVANCED PROCESSING ==========
         let (filteredECG, filteredPPG) = runAdvancedProcessing(ecgSamples: ecgSamples,
@@ -350,33 +392,79 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     private func handleEEGCompleteChunk(_ rawString: String) {
         log("📡 Final EEG Chunk: \(rawString)")
         
-        // Example: raw EEG chunk might be "512,513,511,517,..." or any format
-        // If you just want to store it as-is, do:
+        // Example chunk: "36787;EEG, 357,256,264,264,265;B,1"
+        // 1) Split by ';'
+        let parts = rawString.components(separatedBy: ";")
+        guard parts.count == 3 else {
+            // Not the expected format, handle error or return
+            log("⚠️ Unexpected chunk format: \(rawString)")
+            return
+        }
         
-        lastEEGChunk = rawString
-        allEEGChunks.append(rawString)
+        // 2) Extract each portion
+        let timestampPart = parts[0]       // "36787"
+        let eegPart = parts[1]            // "EEG, 357,256,264,264,265"
+        let eegIMUPart = parts[2]        // "IMU,AccelXSum,AccelYSum..."
         
-        // 1) Parse rawString into an array of Float samples
-        let samplesStr = rawString.components(separatedBy: ",")
+        // --- Parse timestamp ---
+        // Convert the timestamp string (e.g. "36787") into a number
+        let eegTimestamp = Float(timestampPart.trimmingCharacters(in: .whitespacesAndNewlines)) ?? -1
+        
+        // --- Parse EEG data ---
+        // Remove "EEG," prefix, then split by commas
+        let eegDataOnly = eegPart.replacingOccurrences(of: "EEG,", with: "")
+        let eegStrArray = eegDataOnly.components(separatedBy: ",")
         var eegSamples: [Float] = []
-        for s in samplesStr {
+        for s in eegStrArray {
             if let val = Float(s.trimmingCharacters(in: .whitespacesAndNewlines)) {
                 eegSamples.append(val)
             }
         }
         
-        // 2) If we have enough samples, compute basic band powers
-        if eegSamples.count > 8 {  // Need a minimum for FFT
+        // ===== IMU =======
+        // Format: "IMU,AccelX,AccelY,AccelZ,GyroX,GyroY,GyroX"
+        let eegIMUComponents = eegIMUPart.components(separatedBy: ",")
+        if eegIMUComponents.count == 7, eegIMUComponents[0] == "IMU" {
+            if let eegAX = Float(eegIMUComponents[1]),
+               let eegAY = Float(eegIMUComponents[2]),
+               let eegAZ = Float(eegIMUComponents[3]),
+               let eegGX = Float(eegIMUComponents[4]),
+               let eegGY  = Float(eegIMUComponents[5]),
+               let eegGZ  = Float(eegIMUComponents[6]) {
+               
+                DispatchQueue.main.async {
+                    self.eegAccelX = eegAX
+                    self.eegAccelY = eegAY
+                    self.eegAccelZ = eegAZ
+                    self.eegGyroX = eegGX
+                    self.eegGyroY = eegGY
+                    self.eegGyroZ = eegGZ
+                }
+            } else {
+                log("⚠️ eeg IMU parse error: accel/gyro not floats.")
+            }
+        } else {
+            log("⚠️ eeg IMU format mismatch: \(eegIMUPart)")
+        }
+        
+        // --- Store the raw string (if needed) ---
+        lastEEGChunk = rawString
+        allEEGChunks.append(rawString)
+        
+        // --- Do your band computations if you have enough samples ---
+        if eegSamples.count > 8 {
             let newBands = computeEEGBands(eegSamples)
             
-            // 3) Update UI on main thread
             DispatchQueue.main.async {
                 self.eegBands = newBands
             }
         }
         
+        // --- Save the original string if needed for logs/analysis ---
+        //maybe it should also save the other data that is inferenced/analyzed
         saveEEGData(rawString)
     }
+
     
     // MARK: - Disconnect Handling
     func centralManager(_ central: CBCentralManager,

@@ -1,5 +1,18 @@
 #include <Arduino.h>
 #include <bluefruit.h>
+#include "LSM6DS3.h"
+#include "Wire.h"
+#include <math.h>
+
+LSM6DS3 myIMU(I2C_MODE, 0x6A);    //I2C device address 0x6A
+      
+float IMUAccelXSum = 0.0;
+float IMUAccelYSum = 0.0;
+float IMUAccelZSum = 0.0;
+
+float IMUGyroXSum = 0.0;
+float IMUGyroYSum = 0.0;
+float IMUGyroZSum = 0.0;
 
 // -----------------------
 // Match your original UUIDs
@@ -9,7 +22,7 @@
 
 // Define how many samples per chunk you want to send.
 #define N_SAMPLES 100
-#define MTU_SIZE 23  // BLE Max Transmission Unit size
+#define MTU_SIZE 20  // BLE Max Transmission Unit size
 
 // -----------------------
 // Create BLE Service & Characteristic
@@ -32,7 +45,7 @@ void disconnect_callback(uint16_t conn_handle, uint8_t reason);
 void sendInChunks(const String &fullStr, size_t maxChunkSize = MTU_SIZE);
 
 void setup() {
-  Serial1.begin(115200);
+  Serial.begin(115200);
   Serial.println("🚀 Bluefruit BLE Setup Starting...");
 
   // 1) Initialize the Bluefruit stack
@@ -62,12 +75,29 @@ void setup() {
   Bluefruit.Advertising.start(0);
 
   Serial.println("📡 BLE Advertising Started with Service UUID");
+
+    if (myIMU.begin() != 0) {
+        Serial.println("Device error");
+    } else {
+        Serial.println("Device OK!");
+    }
+
 }
 
 void loop() {
   if (deviceConnected) {
     // Simulate EEG reading (or use analogRead if connected to a sensor)
-    int eegSignal = 900; // or analogRead(A1);
+    //int eegSignal = 900; 
+    int eegSignal = analogRead(A0);
+
+    IMUAccelXSum += round(fabs(myIMU.readFloatAccelX()) * 10000.0) / 10000.0;
+    IMUAccelYSum += round(fabs(myIMU.readFloatAccelY()) * 10000.0) / 10000.0;
+    IMUAccelZSum += round(fabs(myIMU.readFloatAccelZ()) * 10000.0) / 10000.0;
+
+    IMUGyroXSum += round(fabs(myIMU.readFloatGyroX()) * 10000.0) / 10000.0;
+    IMUGyroYSum += round(fabs(myIMU.readFloatGyroY()) * 10000.0) / 10000.0;
+    IMUGyroZSum += round(fabs(myIMU.readFloatGyroZ()) * 10000.0) / 10000.0;
+
     
     // Save the sample in the buffer
     eegBuffer[sampleIndex] = eegSignal;
@@ -86,6 +116,23 @@ void loop() {
         chunk += ",";
         chunk += String(eegBuffer[i]);
       }
+
+      // IMU readings
+      chunk += ";IMU";
+      chunk += ",";
+      chunk += String(IMUAccelXSum);
+      chunk += ",";
+      chunk += String(IMUAccelYSum);
+      chunk += ",";
+      chunk += String(IMUAccelZSum);
+      chunk += ",";
+      chunk += String(IMUGyroXSum);
+      chunk += ",";
+      chunk += String(IMUGyroYSum);
+      chunk += ",";
+      chunk += String(IMUGyroZSum);
+
+
       chunk += "*"; // Mark the end of the chunk
       
       Serial.print("📡 Sending EEG Chunk: ");
@@ -96,6 +143,14 @@ void loop() {
 
       // Reset the buffer index for the next chunk.
       sampleIndex = 0;
+
+      IMUAccelXSum = 0.0;
+      IMUAccelYSum = 0.0;
+      IMUAccelZSum = 0.0;
+
+      IMUGyroXSum = 0.0;
+      IMUGyroYSum = 0.0;
+      IMUGyroZSum = 0.0;
     }
 
     // Delay between samples (simulate 100 Hz sampling rate)
