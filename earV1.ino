@@ -4,6 +4,21 @@
 #include "Wire.h"
 #include <math.h>
 
+// On XIAO nRF52840 Sense, these pins usually work for battery measurement:
+#ifndef PIN_VBAT
+  // Some older cores define PIN_VBAT; if not, P0_31 (a.k.a. 32) is the ADC input
+  #define PIN_VBAT        32   // P0.31
+#endif
+
+// This pin must be driven LOW to enable the built-in 1M + 510k divider.
+#define PIN_VBAT_ENABLE  14   // P0.14
+
+// Arbitrary linear thresholds for LiPo
+constexpr float LIPO_FULL_VOLTS  = 4.2f;  // “100%” voltage
+constexpr float LIPO_EMPTY_VOLTS = 3.0f;  // “0%” voltage
+
+
+
 LSM6DS3 myIMU(I2C_MODE, 0x6A);    //I2C device address 0x6A
       
 float IMUAccelXSum = 0.0;
@@ -82,6 +97,9 @@ void setup() {
         Serial.println("Device OK!");
     }
 
+  pinMode(PIN_VBAT_ENABLE, OUTPUT);
+  digitalWrite(PIN_VBAT_ENABLE, LOW);
+
 }
 
 void loop() {
@@ -97,6 +115,22 @@ void loop() {
     IMUGyroXSum += round(fabs(myIMU.readFloatGyroX()) * 10000.0) / 10000.0;
     IMUGyroYSum += round(fabs(myIMU.readFloatGyroY()) * 10000.0) / 10000.0;
     IMUGyroZSum += round(fabs(myIMU.readFloatGyroZ()) * 10000.0) / 10000.0;
+
+    // 1) Read ADC from the VBAT pin
+    uint16_t rawADC = analogRead(PIN_VBAT);
+
+    // 2) Convert the raw code (0..1023) into the ADC voltage (0..3.3 V).
+    //    If you’re using 10-bit resolution, max reading is 1023, so:
+    float adcVoltage = (float)rawADC * (3.3f / 1023.0f);
+
+    // 3) Scale up because the onboard divider is 1M + 510k
+    //    i.e. multiply by (1510 / 510) ~ 2.96
+    float batteryVoltage = adcVoltage * ((1000.0f + 510.0f) / 510.0f);
+    // 4) Estimate battery percentage (simple linear approximation)
+    float percent = 100.0f * (batteryVoltage - LIPO_EMPTY_VOLTS) / (LIPO_FULL_VOLTS - LIPO_EMPTY_VOLTS);
+    // Clamp to [0..100] range
+    if (percent < 0.0f)   percent = 0.0f;
+    if (percent > 100.0f) percent = 100.0f;
 
     
     // Save the sample in the buffer
@@ -132,6 +166,9 @@ void loop() {
       chunk += ",";
       chunk += String(IMUGyroZSum);
 
+      //battery
+      chunk += ";BAT,";
+      chunk += String(percent);
 
       chunk += "*"; // Mark the end of the chunk
       
