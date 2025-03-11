@@ -11,13 +11,26 @@
 #include "MAX30105.h"
 #include "heartRate.h"
 #include "SparkFun_SCD4x_Arduino_Library.h"
-#include <bluefruit.h>  // <<--- Adafruit Bluefruit library
+#include <bluefruit.h> 
+#include "LSM6DS3.h"
+#include <math.h>
+
+LSM6DS3 myIMU(I2C_MODE, 0x6A);    //I2C device address 0x6A
+      
+float IMUAccelXSum = 0.0;
+float IMUAccelYSum = 0.0;
+float IMUAccelZSum = 0.0;
+
+float IMUGyroXSum = 0.0;
+float IMUGyroYSum = 0.0;
+float IMUGyroZSum = 0.0;
+
 
 // ========== BLE DEFINITIONS ==========
 #define SERVICE_UUID              "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
 #define DATA_CHARACTERISTIC_UUID  "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
 
-#define MTU_SIZE 23
+#define MTU_SIZE 20
 
 // Create a BLE Service using the same UUID
 BLEService dataService(SERVICE_UUID);
@@ -32,6 +45,7 @@ bool deviceConnected = false;
 void connect_callback(uint16_t conn_handle)
 {
   deviceConnected = true;
+  Serial.println("✅ Device connected!");
 }
 
 void disconnect_callback(uint16_t conn_handle, uint8_t reason)
@@ -124,7 +138,17 @@ void setup() {
   particleSensor.setup();
   particleSensor.setPulseAmplitudeRed(0x3F);
   particleSensor.setPulseAmplitudeGreen(0);
-  */
+*/
+
+  // ========== Initialize IMU ==========
+  if (myIMU.begin() != 0) {
+      Serial.println("Device error");
+  } else {
+      Serial.println("Device OK!");
+  }
+  
+
+
 
   // ========== BLE SETUP with Bluefruit ==========
   Bluefruit.begin();
@@ -165,6 +189,14 @@ void loop() {
 
     int ecgSignal = 800;
     float irValue = 10000;
+
+    IMUAccelXSum += round(fabs(myIMU.readFloatAccelX()) * 10000.0) / 10000.0;
+    IMUAccelYSum += round(fabs(myIMU.readFloatAccelY()) * 10000.0) / 10000.0;
+    IMUAccelZSum += round(fabs(myIMU.readFloatAccelZ()) * 10000.0) / 10000.0;
+
+    IMUGyroXSum += round(fabs(myIMU.readFloatGyroX()) * 10000.0) / 10000.0;
+    IMUGyroYSum += round(fabs(myIMU.readFloatGyroY()) * 10000.0) / 10000.0;
+    IMUGyroZSum += round(fabs(myIMU.readFloatGyroZ()) * 10000.0) / 10000.0;
 
     // Save the sample in the buffer
     ecgBuffer[sampleIndex] = ecgSignal;
@@ -212,6 +244,22 @@ void loop() {
                + String(latestTemp, 2) + "," 
                + String(latestHumidity, 2);
 
+      
+      // IMU readings
+      chunk += ";IMU";
+      chunk += ",";
+      chunk += String(IMUAccelXSum);
+      chunk += ",";
+      chunk += String(IMUAccelYSum);
+      chunk += ",";
+      chunk += String(IMUAccelZSum);
+      chunk += ",";
+      chunk += String(IMUGyroXSum);
+      chunk += ",";
+      chunk += String(IMUGyroYSum);
+      chunk += ",";
+      chunk += String(IMUGyroZSum);
+      
       chunk += "*"; // Mark the end of the chunk
       
       Serial.print("📡 Sending Chunk: ");
@@ -222,6 +270,14 @@ void loop() {
 
       // Reset the buffer index for the next chunk.
       sampleIndex = 0;
+
+      IMUAccelXSum = 0.0;
+      IMUAccelYSum = 0.0;
+      IMUAccelZSum = 0.0;
+
+      IMUGyroXSum = 0.0;
+      IMUGyroYSum = 0.0;
+      IMUGyroZSum = 0.0;
     }
 
     // Delay between samples (simulate 100 Hz sampling rate)
