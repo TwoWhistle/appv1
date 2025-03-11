@@ -78,16 +78,23 @@ struct BloodPressureSection: View {
     }
 }
 
-// MARK: - 🔹 EEG Bands Section (NEW)
+// MARK: - 🔹 EEG Bands Section
 struct EEGBandsSection: View {
-    let bleManager: BLEManager
+    //let bleManager: BLEManager
+    @ObservedObject var bleManager: BLEManager
     
     var body: some View {
         Section(header: Text("EEG Bands")) {
-            ForEach(["Delta", "Theta", "Alpha", "Beta", "Gamma"], id: \.self) { band in
-                let value = bleManager.eegBands[band] ?? 0
-                MetricRow(label: band, value: value, unit: "µV²", color: colorForEEGBand(band), specifier: "%.2f")
-            }
+            let delta = bleManager.computedEegBands["Delta"] ?? 2
+            let theta = bleManager.computedEegBands["Theta"] ?? 2
+            let alpha = bleManager.computedEegBands["Alpha"] ?? 2
+            let beta = bleManager.computedEegBands["Beta"] ?? 2
+            let gamma = bleManager.computedEegBands["Gamma"] ?? 2
+            MetricRow(label: "Delta", value: delta, unit: "µV²", color: .yellow, specifier: "%.3f")
+            MetricRow(label: "Theta", value: theta, unit: "µV²", color: .yellow, specifier: "%.3f")
+            MetricRow(label: "Alpha", value: alpha, unit: "µV²", color: .yellow, specifier: "%.3f")
+            MetricRow(label: "Beta", value: beta, unit: "µV²", color: .yellow, specifier: "%.3f")
+            MetricRow(label: "Gamma", value: gamma, unit: "µV²", color: .yellow, specifier: "%.3f")
         }
     }
 }

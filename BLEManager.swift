@@ -38,13 +38,12 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     // --- EEG Data ---
     // We'll just store raw EEG chunks, or you can parse them further if needed.
     @Published var lastEEGChunk: String = ""     // Most recently received chunk
-    @Published var allEEGChunks: [String] = []   // Keep a history of raw EEG data chunks
-    @Published var eegBands: [String: Float] = [
-        "Delta": 0.0,
-        "Theta": 0.0,
-        "Alpha": 0.0,
-        "Beta": 0.0,
-        "Gamma": 0.0
+    @Published var computedEegBands: [String: Float] = [
+        "Delta": 1.0,
+        "Theta": 1.0,
+        "Alpha": 1.0,
+        "Beta": 1.0,
+        "Gamma": 1.0
     ]
     
     @Published var wristAccelX: Float = 0.0
@@ -375,8 +374,8 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
             self.computedDiastolicBP = bp.diastolic
         }
         
+                
         saveWristData(
-            rawChunk: rawString,
             spo2: self.computedSpO2,
             hr: self.computedHeartRate,
             respRate: self.computedRespRate,
@@ -384,15 +383,28 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
             ecgFeatures: self.computedECGFeatures,
             ptt: self.computedPTT,
             systolicBP: self.computedSystolicBP,
-            diastolicBP: self.computedDiastolicBP
+            diastolicBP: self.computedDiastolicBP,
+            rawEcgSamples: ecgSamples,
+            rawPpgSamples: ppgSamples,
+            filteredEcgSamples: filteredECG,
+            filteredPpgSamples: filteredPPG,
+            lastCO2: self.lastCO2,
+            lastTemperature: self.lastTemperature,
+            lastHumidity: self.lastHumidity,
+            accelX: self.wristAccelX,
+            accelY: self.wristAccelY,
+            accelZ: self.wristAccelZ,
+            gyroX: self.wristGyroX,
+            gyroY: self.wristGyroX,
+            gyroZ: self.wristGyroX
         )
+
     }
     
     // MARK: - EEG Parsing
     private func handleEEGCompleteChunk(_ rawString: String) {
         log("📡 Final EEG Chunk: \(rawString)")
         
-        // Example chunk: "36787;EEG, 357,256,264,264,265;B,1"
         // 1) Split by ';'
         let parts = rawString.components(separatedBy: ";")
         guard parts.count == 3 else {
@@ -414,10 +426,10 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         // Remove "EEG," prefix, then split by commas
         let eegDataOnly = eegPart.replacingOccurrences(of: "EEG,", with: "")
         let eegStrArray = eegDataOnly.components(separatedBy: ",")
-        var eegSamples: [Float] = []
+        var rawEegSamples: [Float] = []
         for s in eegStrArray {
             if let val = Float(s.trimmingCharacters(in: .whitespacesAndNewlines)) {
-                eegSamples.append(val)
+                rawEegSamples.append(val)
             }
         }
         
@@ -447,22 +459,28 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
             log("⚠️ eeg IMU format mismatch: \(eegIMUPart)")
         }
         
-        // --- Store the raw string (if needed) ---
-        lastEEGChunk = rawString
-        allEEGChunks.append(rawString)
         
-        // --- Do your band computations if you have enough samples ---
-        if eegSamples.count > 8 {
-            let newBands = computeEEGBands(eegSamples)
-            
-            DispatchQueue.main.async {
-                self.eegBands = newBands
-            }
+        let filteredEegSamples = denoiseSignal(rawEegSamples)
+        
+        let newBands = computeEEGBands(filteredEegSamples)
+        
+        DispatchQueue.main.async {
+            self.computedEegBands = newBands
         }
         
-        // --- Save the original string if needed for logs/analysis ---
-        //maybe it should also save the other data that is inferenced/analyzed
-        saveEEGData(rawString)
+        log("\(self.computedEegBands)")
+        
+        saveEEGData(
+            rawEegSamples: rawEegSamples,
+            filteredEegSamples: filteredEegSamples,
+            eegFeatures: self.computedEegBands,
+            accelX: self.wristAccelX,
+            accelY: self.wristAccelY,
+            accelZ: self.wristAccelZ,
+            gyroX: self.wristGyroX,
+            gyroY: self.wristGyroX,
+            gyroZ: self.wristGyroX
+        )
     }
 
     
@@ -481,7 +499,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     
 
     
-    // MARK: - Signal Processing (Replace in backend)
+    // MARK: - Signal Processing
     //this funationality would be replaced in the backend where it would include more advanced denoising and processing
     private func runAdvancedProcessing(ecgSamples: [Float],
                                        ppgSamples: [Float])
@@ -491,6 +509,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         let denoisedPPG = denoiseSignal(ppgSamples)
         return (denoisedECG, denoisedPPG)
     }
+    
     
     private func denoiseSignal(_ signal: [Float]) -> [Float] {
         return movingAverageFilter(bandpassFilterLegacy(signal), windowSize: 5)
@@ -540,7 +559,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     }
     
     
-    // MARK: - COMPUTE BIOMETRICS (Replace in backend)
+    // MARK: - COMPUTE BIOMETRICS
     //this funationality would be replaced in the backend where it would include more advanced computing and inferencing
     
     private func computeBiometrics(filteredECG: [Float],
@@ -977,19 +996,40 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     
     
     // MARK: - Saving and Exporting
-    //also should be repurposed to save and export to the backend database
+    //should be repurposed to save and export to the backend database instead of a text file
     
-    private func saveWristData(rawChunk: String,
-                          spo2: Float,
-                          hr: Float,
-                          respRate: Float,
-                          hrv: Float,
-                          ecgFeatures: [String: Float],
-                          ptt: Float,
-                          systolicBP: Float,
-                          diastolicBP: Float)
-    {
+    private func saveWristData(
+        spo2: Float,
+        hr: Float,
+        respRate: Float,
+        hrv: Float,
+        ecgFeatures: [String: Float],
+        ptt: Float,
+        systolicBP: Float,
+        diastolicBP: Float,
+        rawEcgSamples: [Float],
+        rawPpgSamples: [Float],
+        filteredEcgSamples: [Float],
+        filteredPpgSamples: [Float],
+        lastCO2: Float,
+        lastTemperature: Float,
+        lastHumidity: Float,
+        accelX: Float,
+        accelY: Float,
+        accelZ: Float,
+        gyroX: Float,
+        gyroY: Float,
+        gyroZ: Float
+    ) {
         let timestamp = Date()
+        
+        // Convert ecgSamples & ppgSamples arrays into a semicolon-separated string
+        let rawEcgSampleString = rawEcgSamples.map { "\($0)" }.joined(separator: ";")
+        let rawPpgSampleString = rawPpgSamples.map { "\($0)" }.joined(separator: ";")
+        let filteredEcgSampleString = filteredEcgSamples.map { "\($0)" }.joined(separator: ";")
+        let filteredPpgSampleString = filteredPpgSamples.map { "\($0)" }.joined(separator: ";")
+        
+        // Convert ecgFeatures into a semicolon-separated string of key=value pairs
         var ecgFeatureString = ""
         for (key, val) in ecgFeatures {
             ecgFeatureString += "\(key)=\(val);"
@@ -998,12 +1038,13 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
             ecgFeatureString.removeLast()
         }
         
-        // Updated CSV format now includes systolic and diastolic blood pressure
+        // Updated CSV format with new parameters inserted after timestamp and before spo2
         let entry =
         """
-        \(timestamp),\(rawChunk),\(spo2),\(hr),\(respRate),\(hrv),\(ecgFeatureString),\(ptt),\(systolicBP),\(diastolicBP)\n
+        \(timestamp),\(rawEcgSampleString),\(rawPpgSampleString),\(filteredEcgSampleString),\(filteredPpgSampleString),\(lastCO2),\(lastTemperature),\(lastHumidity),\(accelX),\(accelY),\(accelZ),\(gyroX),\(gyroY),\(gyroZ),\(spo2),\(hr),\(respRate),\(hrv),\(ecgFeatureString),\(ptt),\(systolicBP),\(diastolicBP)\n
         """
         
+        // Write to WristbandDataLog.txt
         let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("WristbandDataLog.txt")
         
         if let handle = try? FileHandle(forWritingTo: fileURL) {
@@ -1016,8 +1057,9 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
             try? entry.write(to: fileURL, atomically: true, encoding: .utf8)
         }
     }
+
     
-    private func saveEEGData(_ rawString: String) {
+    /*private func saveEEGData(_ rawString: String) {
         let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("EEGDataLog.txt")
 
         // Read existing file content (if any)
@@ -1033,6 +1075,53 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
             try newData.write(to: fileURL, atomically: true, encoding: .utf8)
         } catch {
             log("❌ Error saving EEG data: \(error.localizedDescription)")
+        }
+    }*/
+    
+    private func saveEEGData(
+        rawEegSamples: [Float],
+        filteredEegSamples: [Float],
+        eegFeatures: [String: Float],
+        accelX: Float,
+        accelY: Float,
+        accelZ: Float,
+        gyroX: Float,
+        gyroY: Float,
+        gyroZ: Float
+    ) {
+        
+        let timestamp = Date()
+        
+        // Convert eegSamples arrays into a semicolon-separated string
+        let rawEegSampleString = rawEegSamples.map { "\($0)" }.joined(separator: ";")
+        let filteredEegSampleString = filteredEegSamples.map { "\($0)" }.joined(separator: ";")
+        
+        // Convert eegFeatures into a semicolon-separated string of key=value pairs
+        var eegFeatureString = ""
+        for (key, val) in eegFeatures {
+            eegFeatureString += "\(key)=\(val);"
+        }
+        if eegFeatureString.hasSuffix(";") {
+            eegFeatureString.removeLast()
+        }
+        
+        // Updated CSV format with new parameters inserted after timestamp and before spo2
+        let entry =
+        """
+        \(timestamp),\(rawEegSampleString),\(filteredEegSampleString),\(eegFeatureString),\(accelX),\(accelY),\(accelZ),\(gyroX),\(gyroY),\(gyroZ))\n
+        """
+        
+        // Write to WristbandDataLog.txt
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("EEGDataLog.txt")
+        
+        if let handle = try? FileHandle(forWritingTo: fileURL) {
+            handle.seekToEndOfFile()
+            if let data = entry.data(using: .utf8) {
+                handle.write(data)
+            }
+            handle.closeFile()
+        } else {
+            try? entry.write(to: fileURL, atomically: true, encoding: .utf8)
         }
     }
 
