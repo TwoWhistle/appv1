@@ -26,7 +26,8 @@ struct MetricsView: View {
 
 // MARK: - 🔹 Vital Signs Section
 struct VitalSignsSection: View {
-    let bleManager: BLEManager
+    //let bleManager: BLEManager
+    @ObservedObject var bleManager: BLEManager
     
     var body: some View {
         Section(header: Text("Vital Signs")) {
@@ -41,7 +42,8 @@ struct VitalSignsSection: View {
 
 // MARK: - 🔹 ECG Features Section
 struct ECGFeaturesSection: View {
-    let bleManager: BLEManager
+    //let bleManager: BLEManager
+    @ObservedObject var bleManager: BLEManager
     
     var body: some View {
         Section(header: Text("ECG Features")) {
@@ -55,7 +57,8 @@ struct ECGFeaturesSection: View {
 
 // MARK: - 🔹 SCD41 Sensor Section
 struct SCD41SensorSection: View {
-    let bleManager: BLEManager
+    //let bleManager: BLEManager
+    @ObservedObject var bleManager: BLEManager
     
     var body: some View {
         Section(header: Text("SCD41 Sensor")) {
@@ -68,7 +71,8 @@ struct SCD41SensorSection: View {
 
 // MARK: - 🔹 Blood Pressure Section
 struct BloodPressureSection: View {
-    let bleManager: BLEManager
+    //let bleManager: BLEManager
+    @ObservedObject var bleManager: BLEManager
     
     var body: some View {
         Section(header: Text("Blood Pressure")) {

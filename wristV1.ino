@@ -15,7 +15,7 @@
 #include "LSM6DS3.h"
 #include <math.h>
 
-LSM6DS3 myIMU(I2C_MODE, 0x6A);    //I2C device address 0x6A
+//LSM6DS3 myIMU(I2C_MODE, 0x6A);    //I2C device address 0x6A               HEEEERRREEEEEEE
       
 float IMUAccelXSum = 0.0;
 float IMUAccelYSum = 0.0;
@@ -140,12 +140,12 @@ void setup() {
   particleSensor.setPulseAmplitudeGreen(0);
 */
 
-  // ========== Initialize IMU ==========
-  if (myIMU.begin() != 0) {
+  // ========== Initialize IMU ==========                 HERREEEEEE
+  /*if (myIMU.begin() != 0) {
       Serial.println("Device error");
   } else {
       Serial.println("Device OK!");
-  }
+  }*/
   
 
 
@@ -184,11 +184,9 @@ void setup() {
 void loop() {
   if (deviceConnected) {
 
-    //int ecgSignal = analogRead(1);                                      ///HEREEEEEEEEEEE
-    //float irValue = particleSensor.getIR();
-
-    int ecgSignal = 800;
-    float irValue = 10000;
+    /*
+    int ecgSignal = analogRead(1);                                      ///HEREEEEEEEEEEE
+    float irValue = particleSensor.getIR();
 
     IMUAccelXSum += round(fabs(myIMU.readFloatAccelX()) * 10000.0) / 10000.0;
     IMUAccelYSum += round(fabs(myIMU.readFloatAccelY()) * 10000.0) / 10000.0;
@@ -197,6 +195,18 @@ void loop() {
     IMUGyroXSum += round(fabs(myIMU.readFloatGyroX()) * 10000.0) / 10000.0;
     IMUGyroYSum += round(fabs(myIMU.readFloatGyroY()) * 10000.0) / 10000.0;
     IMUGyroZSum += round(fabs(myIMU.readFloatGyroZ()) * 10000.0) / 10000.0;
+    */
+
+    int ecgSignal = 800;
+    float irValue = 10000;
+
+    IMUAccelXSum += 5;
+    IMUAccelYSum += 5;
+    IMUAccelZSum += 5;
+
+    IMUGyroXSum += 5;
+    IMUGyroYSum += 5;
+    IMUGyroZSum += 5;
 
     // Save the sample in the buffer
     ecgBuffer[sampleIndex] = ecgSignal;
