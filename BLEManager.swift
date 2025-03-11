@@ -60,7 +60,9 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     @Published var eegGyroY: Float = 0.0
     @Published var eegGyroZ: Float = 0.0
     
-
+    @Published var wristBat: Float = 0.0
+    @Published var eegBat: Float = 0.0
+    
     // MARK: - BLE References
     private var centralManager: CBCentralManager!
         
@@ -305,8 +307,8 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
 
         // Split into 5 parts by ';'
         let parts = rawString.components(separatedBy: ";")
-        guard parts.count == 5 else {
-            log("⚠️ Incorrect chunk format (need 4 sections).")
+        guard parts.count == 6 else {
+            log("⚠️ Incorrect chunk format (need 6 sections).")
             return
         }
         
@@ -315,6 +317,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         let ppgPart      = parts[2]  // e.g. "PPG,1024,1022,..."
         let scdPart      = parts[3]  // e.g. "SCD,435.12,25.76,48.2"
         let wristIMUPart = parts[4]  // e.g. "IMU,AccelXSum,AccelYSum..."
+        let wristBatPart = parts[5]  // e.g. "BAT,60.40"
 
         // Convert timestamp if needed
         let wristTimestamp = Float(timestampStr) ?? 0.0
@@ -387,6 +390,22 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
             log("⚠️ wrist IMU format mismatch: \(scdPart)")
         }
         
+        // ===== Battery =======
+        // Format: "BAT,60.40"
+        let wristBatComponents = wristBatPart.components(separatedBy: ",")
+        if wristBatComponents.count == 2, wristBatComponents[0] == "BAT" {
+            if let wristBattery = Float(wristBatComponents[1]) {
+               
+                DispatchQueue.main.async {
+                    self.wristBat = wristBattery
+                }
+            } else {
+                log("⚠️ wrist battery parse error: battery not floats.")
+            }
+        } else {
+            log("⚠️ wrist battery format mismatch: \(wristBatPart)")
+        }
+        
 
         // ========== ADVANCED PROCESSING ==========
         let (filteredECG, filteredPPG) = runAdvancedProcessing(ecgSamples: ecgSamples,
@@ -440,7 +459,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         
         // 1) Split by ';'
         let parts = rawString.components(separatedBy: ";")
-        guard parts.count == 3 else {
+        guard parts.count == 4 else {
             // Not the expected format, handle error or return
             log("⚠️ Unexpected chunk format: \(rawString)")
             return
@@ -450,6 +469,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         let timestampPart = parts[0]       // "36787"
         let eegPart = parts[1]            // "EEG, 357,256,264,264,265"
         let eegIMUPart = parts[2]        // "IMU,AccelXSum,AccelYSum..."
+        let eegBatPart = parts[3]        // "BAT,60.40"
         
         // --- Parse timestamp ---
         // Convert the timestamp string (e.g. "36787") into a number
@@ -490,6 +510,22 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
             }
         } else {
             log("⚠️ eeg IMU format mismatch: \(eegIMUPart)")
+        }
+        
+        // ===== Battery =======
+        // Format: "BAT,60.40"
+        let eegBatComponents = eegBatPart.components(separatedBy: ",")
+        if eegBatComponents.count == 2, eegBatComponents[0] == "BAT" {
+            if let eegBattery = Float(eegBatComponents[1]) {
+               
+                DispatchQueue.main.async {
+                    self.eegBat = eegBattery
+                }
+            } else {
+                log("⚠️ eeg battery parse error: battery not floats.")
+            }
+        } else {
+            log("⚠️ eeg battery format mismatch: \(eegBatPart)")
         }
         
         

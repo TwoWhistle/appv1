@@ -13,6 +13,7 @@ struct MetricsView: View {
     var body: some View {
         NavigationView {
             Form {
+                BatterySection(bleManager: bleManager)
                 VitalSignsSection(bleManager: bleManager)
                 ECGFeaturesSection(bleManager: bleManager)
                 SCD41SensorSection(bleManager: bleManager)
@@ -20,6 +21,19 @@ struct MetricsView: View {
                 EEGBandsSection(bleManager: bleManager)
             }
             .navigationTitle("Live Metrics")
+        }
+    }
+}
+
+// MARK: - 🔹 Battery Section
+struct BatterySection: View {
+    //let bleManager: BLEManager
+    @ObservedObject var bleManager: BLEManager
+    
+    var body: some View {
+        Section(header: Text("Battery Life")) {
+            MetricRow(label: "EEG Battery Life", value: bleManager.eegBat, unit: "%", color: .white)
+            MetricRow(label: "Wristband Battery Life", value: bleManager.wristBat, unit: "%", color: .white)
         }
     }
 }
