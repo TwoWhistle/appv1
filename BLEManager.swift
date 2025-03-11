@@ -85,8 +85,41 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     override init() {
         super.init()
         log("🔵 BLEManager Init - Starting Central Manager")
-        centralManager = CBCentralManager(delegate: self, queue: nil)
+        centralManager = CBCentralManager(
+            delegate: self,
+            queue: nil,
+            options: [
+                CBCentralManagerOptionRestoreIdentifierKey: "com.ryanyue.appv1.ble"
+            ]
+        )
     }
+    
+    func centralManager(_ central: CBCentralManager, willRestoreState dict: [String : Any]) {
+        log("🔵 centralManager: willRestoreState called.")
+
+        // Check if any peripherals were restored
+        if let restoredPeripherals = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] {
+            for rp in restoredPeripherals {
+                let name = rp.name ?? "Unknown"
+                log("   - Restored peripheral: \(name)")
+
+                // Check if it's the wrist device
+                if name.lowercased().contains("nrfwr") {
+                    self.wristPeripheral = rp
+                    self.wristPeripheral?.delegate = self
+                    // Re-discover services & characteristics
+                    self.wristPeripheral?.discoverServices([wristServiceUUID])
+                }
+                // Check if it's the EEG device
+                else if name.lowercased().contains("nrfear") {
+                    self.eegPeripheral = rp
+                    self.eegPeripheral?.delegate = self
+                    self.eegPeripheral?.discoverServices([eegServiceUUID])
+                }
+            }
+        }
+    }
+
     
     // MARK: - CBCentralManagerDelegate
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
