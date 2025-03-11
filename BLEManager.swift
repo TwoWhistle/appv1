@@ -523,12 +523,19 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
                         error: Error?) {
         let name = peripheral.name ?? "Unknown"
         log("❌ Disconnected from \(name)")
-        
-        // If you want to reconnect automatically, do so here
-        // Or re-scan for both devices
-        central.scanForPeripherals(withServices: [wristServiceUUID, eegServiceUUID], options: nil)
+
+        // If this was the wrist device that disconnected, reset our reference
+        if peripheral == wristPeripheral {
+            wristPeripheral = nil
+        } else if peripheral == eegPeripheral {
+            eegPeripheral = nil
+        }
+
+        // Now scanning again will let `didDiscover` connect:
+        central.scanForPeripherals(withServices: [wristServiceUUID, eegServiceUUID],
+                                   options: nil)
     }
-    
+
     
 
     
